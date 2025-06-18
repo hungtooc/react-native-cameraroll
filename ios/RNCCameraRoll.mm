@@ -209,25 +209,28 @@ RCT_EXPORT_METHOD(saveToCameraRoll:(NSURLRequest *)request
       }
     } completionHandler:^(BOOL success, NSError *error) {
       if (success) {
-        PHFetchOptions *options = [PHFetchOptions new];
-        options.includeHiddenAssets = YES;
-        options.includeAllBurstAssets = YES;
-        options.fetchLimit = 1;
-        PHFetchResult<PHAsset *> *createdAsset = [PHAsset fetchAssetsWithLocalIdentifiers:@[placeholder.localIdentifier]
-                                                                                  options:options];
-        if (createdAsset.count < 1) {
-          reject(kErrorUnableToSave, nil, nil);
-          return;
-        }
-        NSDictionary *dictionary = [self convertAssetToDictionary:[createdAsset firstObject]
-                                                    includeAlbums:YES
-                                                  includeFilename:YES
-                                             includeFileExtension:YES
-                                                 includeImageSize:YES
-                                                  includeFileSize:YES
-                                          includePlayableDuration:YES
-                                                  includeLocation:YES
-                                                  includeSourceType:YES];
+        // PHFetchOptions *options = [PHFetchOptions new];
+        // options.includeHiddenAssets = YES;
+        // options.includeAllBurstAssets = YES;
+        // options.fetchLimit = 1;
+        // PHFetchResult<PHAsset *> *createdAsset = [PHAsset fetchAssetsWithLocalIdentifiers:@[placeholder.localIdentifier]
+        //                                                                           options:options];
+        // if (createdAsset.count < 1) {
+        //   reject(kErrorUnableToSave, nil, nil);
+        //   return;
+        // }
+        // NSDictionary *dictionary = [self convertAssetToDictionary:[createdAsset firstObject]
+        //                                             includeAlbums:YES
+        //                                           includeFilename:YES
+        //                                      includeFileExtension:YES
+        //                                          includeImageSize:YES
+        //                                           includeFileSize:YES
+        //                                   includePlayableDuration:YES
+        //                                           includeLocation:YES
+        //                                           includeSourceType:YES];
+        NSDictionary *dictionary = @{
+            @"age": @30,
+        };
         resolve(dictionary);
       } else {
         reject(kErrorUnableToSave, nil, error);
