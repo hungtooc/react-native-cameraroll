@@ -288,12 +288,8 @@ export class CameraRoll {
 
   static saveImage(
     tag: string,
-    type?: 'photo' | 'video' | 'auto',
-  ): Promise<PhotoIdentifier> {
-    console.warn(
-      'CameraRoll.saveToCameraRoll(tag, type) is deprecated.  Use the save function instead',
-    );
-    return CameraRoll.saveAsset(tag, {type});
+  ): Promise<boolean> {
+    return CameraRoll.saveImage(tag);
   }
   static getAlbums(
     params: GetAlbumsParams = {assetType: 'All', albumType: 'Album'},
