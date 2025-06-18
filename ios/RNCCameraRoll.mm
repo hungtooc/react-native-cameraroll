@@ -1005,54 +1005,35 @@ static void checkPhotoLibraryConfig()
 
 
 RCT_EXPORT_METHOD(saveImage:(NSURLRequest *)request
-                  options:(NSDictionary *)options
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
-  // We load images and videos differently.
-  // Images have many custom loaders which can load images from ALAssetsLibrary URLs, PHPhotoLibrary
-  // URLs, `data:` URIs, etc. Video URLs are passed directly through for now; it may be nice to support
-  // more ways of loading videos in the future.
-  __block NSURL *inputURI = nil;
-  __block PHFetchResult *photosAsset;
-  __block PHAssetCollection *collection;
-  __block PHObjectPlaceholder *placeholder;
+  __block NSURL *inputURI = request.URL;
+
+  if (!inputURI || ![inputURI isFileURL]) {
+    reject(@"E_INVALID_URI", @"Invalid or missing file URL", nil);
+    return;
+  }
 
   void (^saveBlock)(void) = ^void() {
-    // performChanges and the completionHandler are called on
-    // arbitrary threads, not the main thread - this is safe
-    // for now since all JS is queued and executed on a single thread.
-    // We should reevaluate this if that assumption changes.
-
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-      PHAssetChangeRequest *assetRequest ;
-      
-      assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImageAtFileURL:inputURI];
-      placeholder = [assetRequest placeholderForCreatedAsset];
-      if (![options[@"album"] isEqualToString:@""]) {
-        photosAsset = [PHAsset fetchAssetsInAssetCollection:collection options:nil];
-        PHAssetCollectionChangeRequest *albumChangeRequest = [PHAssetCollectionChangeRequest changeRequestForAssetCollection:collection assets:photosAsset];
-        [albumChangeRequest addAssets:@[placeholder]];
-      }
+      [PHAssetChangeRequest creationRequestForAssetFromImageAtFileURL:inputURI];
     } completionHandler:^(BOOL success, NSError *error) {
       if (success) {
-          resolve(@YES); // Hoặc resolve(nil) nếu không cần giá trị gì
+        resolve(@YES);
       } else {
-        reject(kErrorUnableToSave, nil, error);
+        reject(@"E_UNABLE_TO_SAVE", @"Failed to save image to camera roll", error);
       }
     }];
   };
-  void (^saveWithOptions)(void) = ^void() {
-     saveBlock();
-  };
 
   void (^loadBlock)(bool isLimited) = ^void(bool isLimited) {
-    inputURI = request.URL;
-    saveWithOptions();
+    saveBlock();
   };
 
-  requestPhotoLibraryAccess(reject, loadBlock, true);
+  requestPhotoLibraryAccess(reject, loadBlock, true); // requestAddOnly = true
 }
+
 
 
 #if RCT_NEW_ARCH_ENABLED
