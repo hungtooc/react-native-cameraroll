@@ -1026,36 +1026,8 @@ RCT_EXPORT_METHOD(saveImage:(NSURLRequest *)request
 
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
       PHAssetChangeRequest *assetRequest ;
-      if ([options[@"type"] isEqualToString:@"video"]) {
-        assetRequest = [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:inputURI];
-      } else if ([[inputURI.pathExtension lowercaseString] isEqualToString:@"gif"]) {
-        NSData *data = [NSData dataWithContentsOfURL:inputURI];
-        PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
-        [request addResourceWithType:PHAssetResourceTypePhoto data:data options:NULL];
-        assetRequest = request;
-      } else {
-        if ([[inputURI.pathExtension lowercaseString] isEqualToString:@"webp"]) {
-          NSData *data = [NSData dataWithContentsOfURL:inputURI];
-          UIImage *webpImage;
-
-          #ifdef SD_WEB_IMAGE_WEBP_CODER_AVAILABLE
-            webpImage = [[SDImageWebPCoder sharedCoder] decodedImageWithData:data options:nil];
-          #else
-            if (@available(iOS 14, *)) {
-              webpImage = [UIImage imageWithData:data];
-            } else {
-              // webp cannot be saved if SDWebImage is not installed and we're not on iOS 14 or above.
-              reject(kErrorUnableToSave, nil, nil);
-              return;
-            }
-          #endif
-
-          assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImage:webpImage];
-        } else {
-          // normal Image (jpg, heif, png, ...)
-          assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImageAtFileURL:inputURI];
-        }
-      }
+      
+      assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImageAtFileURL:inputURI];
       placeholder = [assetRequest placeholderForCreatedAsset];
       if (![options[@"album"] isEqualToString:@""]) {
         photosAsset = [PHAsset fetchAssetsInAssetCollection:collection options:nil];
@@ -1064,60 +1036,14 @@ RCT_EXPORT_METHOD(saveImage:(NSURLRequest *)request
       }
     } completionHandler:^(BOOL success, NSError *error) {
       if (success) {
-        PHFetchOptions *options = [PHFetchOptions new];
-        options.includeHiddenAssets = YES;
-        options.includeAllBurstAssets = YES;
-        options.fetchLimit = 1;
-        PHFetchResult<PHAsset *> *createdAsset = [PHAsset fetchAssetsWithLocalIdentifiers:@[placeholder.localIdentifier]
-                                                                                  options:options];
-        if (createdAsset.count < 1) {
-          reject(kErrorUnableToSave, nil, nil);
-          return;
-        }
-        NSDictionary *dictionary = [self convertAssetToDictionary:[createdAsset firstObject]
-                                                    includeAlbums:YES
-                                                  includeFilename:YES
-                                             includeFileExtension:YES
-                                                 includeImageSize:YES
-                                                  includeFileSize:YES
-                                          includePlayableDuration:YES
-                                                  includeLocation:YES
-                                                  includeSourceType:YES];
-        resolve(dictionary);
+          resolve(@YES); // Hoặc resolve(nil) nếu không cần giá trị gì
       } else {
         reject(kErrorUnableToSave, nil, error);
       }
     }];
   };
   void (^saveWithOptions)(void) = ^void() {
-    if (![options[@"album"] isEqualToString:@""]) {
-
-      PHFetchOptions *fetchOptions = [[PHFetchOptions alloc] init];
-      fetchOptions.predicate = [NSPredicate predicateWithFormat:@"title = %@", options[@"album"] ];
-      collection = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
-                                                            subtype:PHAssetCollectionSubtypeAny
-                                                            options:fetchOptions].firstObject;
-      // Create the album
-      if (!collection) {
-        [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-          PHAssetCollectionChangeRequest *createAlbum = [PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:options[@"album"]];
-          placeholder = [createAlbum placeholderForCreatedAssetCollection];
-        } completionHandler:^(BOOL success, NSError *error) {
-          if (success) {
-            PHFetchResult *collectionFetchResult = [PHAssetCollection fetchAssetCollectionsWithLocalIdentifiers:@[placeholder.localIdentifier]
-                                                                                                        options:nil];
-            collection = collectionFetchResult.firstObject;
-            saveBlock();
-          } else {
-            reject(kErrorUnableToSave, nil, error);
-          }
-        }];
-      } else {
-        saveBlock();
-      }
-    } else {
-      saveBlock();
-    }
+     saveBlock();
   };
 
   void (^loadBlock)(bool isLimited) = ^void(bool isLimited) {
