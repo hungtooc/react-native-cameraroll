@@ -1003,6 +1003,132 @@ static void checkPhotoLibraryConfig()
 #endif
 }
 
+
+RCT_EXPORT_METHOD(saveImage:(NSURLRequest *)request
+                  options:(NSDictionary *)options
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+{
+  // We load images and videos differently.
+  // Images have many custom loaders which can load images from ALAssetsLibrary URLs, PHPhotoLibrary
+  // URLs, `data:` URIs, etc. Video URLs are passed directly through for now; it may be nice to support
+  // more ways of loading videos in the future.
+  __block NSURL *inputURI = nil;
+  __block PHFetchResult *photosAsset;
+  __block PHAssetCollection *collection;
+  __block PHObjectPlaceholder *placeholder;
+
+  void (^saveBlock)(void) = ^void() {
+    // performChanges and the completionHandler are called on
+    // arbitrary threads, not the main thread - this is safe
+    // for now since all JS is queued and executed on a single thread.
+    // We should reevaluate this if that assumption changes.
+
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+      PHAssetChangeRequest *assetRequest ;
+      if ([options[@"type"] isEqualToString:@"video"]) {
+        assetRequest = [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:inputURI];
+      } else if ([[inputURI.pathExtension lowercaseString] isEqualToString:@"gif"]) {
+        NSData *data = [NSData dataWithContentsOfURL:inputURI];
+        PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
+        [request addResourceWithType:PHAssetResourceTypePhoto data:data options:NULL];
+        assetRequest = request;
+      } else {
+        if ([[inputURI.pathExtension lowercaseString] isEqualToString:@"webp"]) {
+          NSData *data = [NSData dataWithContentsOfURL:inputURI];
+          UIImage *webpImage;
+
+          #ifdef SD_WEB_IMAGE_WEBP_CODER_AVAILABLE
+            webpImage = [[SDImageWebPCoder sharedCoder] decodedImageWithData:data options:nil];
+          #else
+            if (@available(iOS 14, *)) {
+              webpImage = [UIImage imageWithData:data];
+            } else {
+              // webp cannot be saved if SDWebImage is not installed and we're not on iOS 14 or above.
+              reject(kErrorUnableToSave, nil, nil);
+              return;
+            }
+          #endif
+
+          assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImage:webpImage];
+        } else {
+          // normal Image (jpg, heif, png, ...)
+          assetRequest = [PHAssetChangeRequest creationRequestForAssetFromImageAtFileURL:inputURI];
+        }
+      }
+      placeholder = [assetRequest placeholderForCreatedAsset];
+      if (![options[@"album"] isEqualToString:@""]) {
+        photosAsset = [PHAsset fetchAssetsInAssetCollection:collection options:nil];
+        PHAssetCollectionChangeRequest *albumChangeRequest = [PHAssetCollectionChangeRequest changeRequestForAssetCollection:collection assets:photosAsset];
+        [albumChangeRequest addAssets:@[placeholder]];
+      }
+    } completionHandler:^(BOOL success, NSError *error) {
+      if (success) {
+        PHFetchOptions *options = [PHFetchOptions new];
+        options.includeHiddenAssets = YES;
+        options.includeAllBurstAssets = YES;
+        options.fetchLimit = 1;
+        PHFetchResult<PHAsset *> *createdAsset = [PHAsset fetchAssetsWithLocalIdentifiers:@[placeholder.localIdentifier]
+                                                                                  options:options];
+        if (createdAsset.count < 1) {
+          reject(kErrorUnableToSave, nil, nil);
+          return;
+        }
+        NSDictionary *dictionary = [self convertAssetToDictionary:[createdAsset firstObject]
+                                                    includeAlbums:YES
+                                                  includeFilename:YES
+                                             includeFileExtension:YES
+                                                 includeImageSize:YES
+                                                  includeFileSize:YES
+                                          includePlayableDuration:YES
+                                                  includeLocation:YES
+                                                  includeSourceType:YES];
+        resolve(dictionary);
+      } else {
+        reject(kErrorUnableToSave, nil, error);
+      }
+    }];
+  };
+  void (^saveWithOptions)(void) = ^void() {
+    if (![options[@"album"] isEqualToString:@""]) {
+
+      PHFetchOptions *fetchOptions = [[PHFetchOptions alloc] init];
+      fetchOptions.predicate = [NSPredicate predicateWithFormat:@"title = %@", options[@"album"] ];
+      collection = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
+                                                            subtype:PHAssetCollectionSubtypeAny
+                                                            options:fetchOptions].firstObject;
+      // Create the album
+      if (!collection) {
+        [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+          PHAssetCollectionChangeRequest *createAlbum = [PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:options[@"album"]];
+          placeholder = [createAlbum placeholderForCreatedAssetCollection];
+        } completionHandler:^(BOOL success, NSError *error) {
+          if (success) {
+            PHFetchResult *collectionFetchResult = [PHAssetCollection fetchAssetCollectionsWithLocalIdentifiers:@[placeholder.localIdentifier]
+                                                                                                        options:nil];
+            collection = collectionFetchResult.firstObject;
+            saveBlock();
+          } else {
+            reject(kErrorUnableToSave, nil, error);
+          }
+        }];
+      } else {
+        saveBlock();
+      }
+    } else {
+      saveBlock();
+    }
+  };
+
+  void (^loadBlock)(bool isLimited) = ^void(bool isLimited) {
+    inputURI = request.URL;
+    saveWithOptions();
+  };
+
+  requestPhotoLibraryAccess(reject, loadBlock, true);
+}
+
+
 #if RCT_NEW_ARCH_ENABLED
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params

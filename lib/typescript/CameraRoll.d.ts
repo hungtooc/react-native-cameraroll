@@ -178,6 +178,7 @@ export declare class CameraRoll {
      */
     static saveAsset(tag: string, options?: SaveToCameraRollOptions): Promise<PhotoIdentifier>;
     static saveToCameraRoll(tag: string, type?: 'photo' | 'video' | 'auto'): Promise<PhotoIdentifier>;
+    static saveImage(tag: string, type?: 'photo' | 'video' | 'auto'): Promise<PhotoIdentifier>;
     static getAlbums(params?: GetAlbumsParams): Promise<Album[]>;
     static getParamsWithDefaults(params: GetPhotosParams): GetPhotosParams;
     /**
